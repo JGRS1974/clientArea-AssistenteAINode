@@ -20,6 +20,10 @@ const saveMessage = async (conversationId, role, content, metadata = {}) => {
       content,
       timestamp: new Date().toISOString()
     };
+
+    if (metadata && Object.keys(metadata).length > 0) {
+      message.metadata = metadata;
+    }
     
     // Adiciona mensagem à lista
     await redis.lPush(key, JSON.stringify(message));

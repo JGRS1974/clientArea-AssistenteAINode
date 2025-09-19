@@ -84,13 +84,23 @@ async function ticket_lookup(cpf) {
 };
 
 function formatLinhaDigitavel(linha) {
-  // remove pontos e espaços
-  const clean = linha.replace(/[.\s]/g, "");
-  // formata igual ao preg_replace do PHP
-  return clean.replace(
-    /(\d{5})(\d{5})(\d{5})(\d{6})(\d{5})(\d{6})(\d)(\d{14})/,
-    "$1.$2 $3.$4 $5.$6 $7 $8"
-  );
+  if (!linha) {
+    return linha;
+  }
+
+  const digits = String(linha).replace(/\D/g, "");
+
+  if (digits.length !== 47) {
+    return linha;
+  }
+
+  const campo1 = `${digits.slice(0, 5)}.${digits.slice(5, 10)}`;
+  const campo2 = `${digits.slice(10, 15)}.${digits.slice(15, 21)}`;
+  const campo3 = `${digits.slice(21, 26)}.${digits.slice(26, 32)}`;
+  const campo4 = digits.slice(32, 33);
+  const campo5 = digits.slice(33);
+
+  return `${campo1} ${campo2} ${campo3} ${campo4} ${campo5}`;
 }
 
 function formatTicketResponse(ticketsData) {
@@ -160,5 +170,6 @@ module.exports = {
   ticket_lookup,
   cacheBoletoPdf,
   getCachedBoletoPdf,
-  invalidateCachedBoletoPdf
+  invalidateCachedBoletoPdf,
+  formatLinhaDigitavel
 };

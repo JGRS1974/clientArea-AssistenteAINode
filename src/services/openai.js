@@ -1,6 +1,16 @@
 const { openai, createSystemPrompt, getFunctions } = require('../config/openai');
-const { ticket_lookup } = require('../tools/ticketTool');
+const { ticket_lookup, formatLinhaDigitavel } = require('../tools/ticketTool');
 const { card_lookup } = require('../tools/cardTool');
+
+const LINEA_DIGITAVEL_REGEX = /\b\d{47}\b/g;
+
+const formatLinhaDigitavelInText = (text) => {
+  if (!text || typeof text !== 'string') {
+    return text;
+  }
+
+  return text.replace(LINEA_DIGITAVEL_REGEX, (match) => formatLinhaDigitavel(match));
+};
 
 const processUserMessage = async (messages, kw) => {
   try {
@@ -69,9 +79,11 @@ const processUserMessage = async (messages, kw) => {
         max_tokens: 1000
       });
 
+      const assistantReply = secondCompletion.choices[0].message.content;
+
       return {
         success: true,
-        response: secondCompletion.choices[0].message.content,
+        response: formatLinhaDigitavelInText(assistantReply),
         functionCalled: functionName,
         functionArgs,
         functionResult
@@ -80,7 +92,7 @@ const processUserMessage = async (messages, kw) => {
 
     return {
       success: true,
-      response: message.content
+      response: formatLinhaDigitavelInText(message.content)
     };
 
   } catch (error) {
@@ -115,7 +127,7 @@ const processImageMessage = async (imageBuffer, mimeType, kw) => {
     const base64Image = imageBuffer.toString('base64');
     
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4-vision-preview',
+      model: 'whisper-1',
       messages: [
         { role: 'system', content: systemPrompt },
         {

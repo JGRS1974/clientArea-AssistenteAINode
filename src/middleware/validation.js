@@ -2,12 +2,12 @@ const Joi = require('joi');
 
 const validateChatRequest = (req, res, next) => {
   const schema = Joi.object({
-    text: Joi.string().min(1).max(1000).required(),
+    text: Joi.string().allow('', null).max(1000).optional(),
     conversation_id: Joi.string().uuid().allow(null, '').optional(),
-    type: Joi.string().valid('text', 'audio', 'image').default('text')
+    type: Joi.string().valid('text', 'audio', 'image', 'document').optional()
   });
 
-  const { error, value } = schema.validate(req.body);
+  const { error, value } = schema.validate(req.body, { abortEarly: false, stripUnknown: true });
 
   if (error) {
     return res.status(400).json({
@@ -16,7 +16,66 @@ const validateChatRequest = (req, res, next) => {
     });
   }
 
+  const hasText = typeof value.text === 'string' && value.text.trim().length > 0;
+  const hasAudio = Array.isArray(req.files?.audio) && req.files.audio.length > 0;
+  const hasImage = Array.isArray(req.files?.image) && req.files.image.length > 0;
+  const hasDocument = Array.isArray(req.files?.document) && req.files.document.length > 0;
+
+  if (!hasText && !hasAudio && !hasImage && !hasDocument) {
+    return res.status(400).json({
+      error: 'Dados inválidos',
+      details: ['Informe pelo menos texto, áudio, imagem ou documento.']
+    });
+  }
+
+  if (!value.type) {
+    if (hasAudio) {
+      value.type = 'audio';
+    } else if (hasImage) {
+      value.type = 'image';
+    } else if (hasDocument) {
+      value.type = 'document';
+    } else {
+      value.type = 'text';
+    }
+  }
+
+  if (value.type === 'audio' && !hasAudio) {
+    return res.status(400).json({
+      error: 'Dados inválidos',
+      details: ['Envie um arquivo de áudio para requests do tipo áudio.']
+    });
+  }
+
+  if (value.type === 'image' && !hasImage) {
+    return res.status(400).json({
+      error: 'Dados inválidos',
+      details: ['Envie uma imagem para requests do tipo imagem.']
+    });
+  }
+
+  if (value.type === 'document' && !hasDocument) {
+    return res.status(400).json({
+      error: 'Dados inválidos',
+      details: ['Envie um documento para requests do tipo documento.']
+    });
+  }
+
+  if (value.type === 'text' && !hasText) {
+    return res.status(400).json({
+      error: 'Dados inválidos',
+      details: ['Campo de texto é obrigatório para requests do tipo texto.']
+    });
+  }
+
+  if (hasText) {
+    value.text = value.text.trim();
+  } else {
+    value.text = '';
+  }
+
   req.body = value;
+  
   next();
 };
 
