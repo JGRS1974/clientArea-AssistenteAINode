@@ -53,9 +53,10 @@ REDIS_URL=redis://localhost:6379
 REDIS_PASSWORD=
 
 # APIs da Corpe
-CORPE_API_BASE_URL=https://api.corpe.com.br
-CORPE_BOLETOS_ENDPOINT=/api/v1/boletos
-CORPE_CARTEIRINHA_ENDPOINT=/api/v1/carteirinha
+CORPE_API_BASE_URL=
+CORPE_COBRANCAS_ENDPOINT=/tsmadesao/cobrancas
+CORPE_BOLETOS_ENDPOINT=/tsmboletos/boleto
+CORPE_CARTEIRINHA_ENDPOINT=/tsmadesao/beneficiario
 
 # Sistema
 CONVERSATION_LIMIT=50
@@ -82,39 +83,14 @@ npm start
 GET /health
 ```
 
-### 2. Criar Nova Sessão
+### 2. Chat por Texto
 ```
-POST /api/assistant/session
-Headers: x-kw-key: <chave-de-acesso>
-```
-
-### 3. Chat por Texto
-```
-POST /api/assistant/chat
-Headers: x-kw-key: <chave-de-acesso>
+POST /assistant/chat
+Headers: kw: <chave-de-acesso> (após usuário fazer login no sistema)
 Body: {
-  "message": "Quero consultar meus boletos",
-  "sessionId": "uuid-da-sessao" // opcional
+  "text": "Quero consultar meus boletos",
+  "conversation_id": "uuid-da-conversa" // opcional
 }
-```
-
-### 4. Upload de Imagem
-```
-POST /api/assistant/image
-Headers: x-kw-key: <chave-de-acesso>
-Body: FormData com campo "image" e "sessionId" (opcional)
-```
-
-### 5. Recuperar Histórico
-```
-GET /api/assistant/conversation/:sessionId
-Headers: x-kw-key: <chave-de-acesso>
-```
-
-### 6. Limpar Conversa
-```
-DELETE /api/assistant/conversation/:sessionId
-Headers: x-kw-key: <chave-de-acesso>
 ```
 
 ## Estrutura do Projeto
@@ -133,46 +109,38 @@ src/
 │   ├── conversation.js    # Gerenciamento conversas
 │   ├── corpeApi.js       # Integração API Corpe
 │   └── openai.js         # Processamento OpenAI
+├── templates/
+│   └── system-prompt.hbs # System prompt utilizado no modelo OpenAI
+├── tools/
+│   ├── cardTool.js        # Tool para fazer requisição na API Corpe - recuperar carterinha
+│   └── ticketTool.js      # Tool para fazer requisição na API Corpe - recuperar boleto/s
+├── utils/
+│   ├── pinGenerator.js    # Gera o pin para ser enviado nas requisições de consulta na API Corpe
+│   └── pins.json          # Arquivo json com os pins de acesso para cada cpf informado - os pins expiram a cada 24hs
 └── server.js             # Servidor principal
 ```
 
 ## Funcionamento
 
-1. **Sessão**: Cada conversa é identificada por um UUID único
-2. **Persistência**: Últimas 50 mensagens salvas no Redis por 24h
-3. **Validação**: Chave KW obrigatória no header `x-kw-key`
-4. **Funções**: Assistant usa function calling para consultar APIs
-5. **Imagens**: GPT-4 Vision extrai CPF de documentos enviados
+1. **Conversação**: Cada conversa é identificada por um UUID único
+2. **Persistência**: Últimas 50 mensagens salvas no Redis
+3. **Validação**: Chave KW no header `kw` - obrigatória para consulta da carterinha
+4. **Funções**: Assistant usa function calling para consultar API Corpe
 
 ## Exemplos de Uso
 
 ### Chat Texto
 ```javascript
-const response = await fetch('/api/assistant/chat', {
+const response = await fetch('/assistant/chat', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
-    'x-kw-key': 'sua-chave-aqui'
+    'kw': 'sua-chave-aqui/null ou não enviar'
   },
   body: JSON.stringify({
     message: 'Olá, quero consultar meus boletos',
-    sessionId: 'uuid-opcional'
+    conversation_id: 'uuid-opcional'
   })
-});
-```
-
-### Upload de Imagem
-```javascript
-const formData = new FormData();
-formData.append('image', fileInput.files[0]);
-formData.append('sessionId', sessionId);
-
-const response = await fetch('/api/assistant/image', {
-  method: 'POST',
-  headers: {
-    'x-kw-key': 'sua-chave-aqui'
-  },
-  body: formData
 });
 ```
 
@@ -210,9 +178,4 @@ O sistema gera logs detalhados para:
 
 - Máximo 50 mensagens por conversa
 - Imagens limitadas a 5MB (JPEG/PNG)
-- Conversas expiram em 24 horas
 - Apenas consultas de boletos e carteirinhas
-
-## Suporte
-
-Para dúvidas sobre as APIs da Corpe, consulte a documentação oficial ou entre em contato com o suporte técnico.
