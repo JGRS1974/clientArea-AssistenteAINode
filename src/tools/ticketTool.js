@@ -5,6 +5,31 @@ const NodeCache = require("node-cache");
 
 // cache em memória com TTL (em segundos)
 const boletoCache = new NodeCache();
+const BOLETO_CACHE_PREFIX = "boleto_pdf_";
+
+function cacheBoletoPdf(token, pdfBase64, ttlSeconds = 3600) {
+  if (!token || !pdfBase64) {
+    return false;
+  }
+
+  return boletoCache.set(`${BOLETO_CACHE_PREFIX}${token}`, pdfBase64, ttlSeconds);
+}
+
+function getCachedBoletoPdf(token) {
+  if (!token) {
+    return null;
+  }
+
+  return boletoCache.get(`${BOLETO_CACHE_PREFIX}${token}`) || null;
+}
+
+function invalidateCachedBoletoPdf(token) {
+  if (!token) {
+    return false;
+  }
+
+  return boletoCache.del(`${BOLETO_CACHE_PREFIX}${token}`) > 0;
+}
 
 async function ticket_lookup(cpf) {
   try {
@@ -91,7 +116,7 @@ function formatTicketResponse(ticketsData) {
       const token = crypto.randomBytes(16).toString("hex");
 
       // guarda PDF em base64 no cache por 1h
-      boletoCache.set(`boleto_pdf_${token}`, ticket.boleto, 3600);
+      cacheBoletoPdf(token, ticket.boleto, 3600);
 
       // gera link de download (ajusta conforme tua rota)
       const baseUrl = process.env.APP_URL || "http://localhost:3000";
@@ -132,5 +157,8 @@ function formatTicketResponse(ticketsData) {
 }
 
 module.exports = {
-  ticket_lookup
+  ticket_lookup,
+  cacheBoletoPdf,
+  getCachedBoletoPdf,
+  invalidateCachedBoletoPdf
 };

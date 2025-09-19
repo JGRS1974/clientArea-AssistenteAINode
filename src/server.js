@@ -5,6 +5,7 @@ const morgan = require('morgan');
 require('dotenv').config();
 
 const assistantRoutes = require('./routes/assistant');
+const boletoRoutes = require('./routes/boleto');
 const { connectRedis, getRedisClient } = require('./config/redis');
 const { loadPins, generatePin } = require("./utils/pinGenerator");
 const { ticket_lookup } = require("./tools/ticketTool");
@@ -22,6 +23,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Routes
 app.use('/assistant', assistantRoutes);
+app.use('/api/boleto', boletoRoutes);
 
 // Users Pin
 (async () => {
