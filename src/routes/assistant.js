@@ -19,8 +19,7 @@ router.post('/chat', chatUpload, validateChatRequest, async (req, res) => {
     const files = req.files || {};
 
     const audioFile = Array.isArray(files.audio) && files.audio.length ? files.audio[0] : null;
-    const imageFile = Array.isArray(files.image) && files.image.length ? files.image[0] : null;
-    const documentFile = Array.isArray(files.document) && files.document.length ? files.document[0] : null;
+    const fileUpload = Array.isArray(files.file) && files.file.length ? files.file[0] : null;
 
     // Se não tem conversationId, cria uma nova id de conversa
     const conversationId = conversation_id || createConversationId();
@@ -74,58 +73,49 @@ router.post('/chat', chatUpload, validateChatRequest, async (req, res) => {
       }
     }
 
-    if (imageFile) {
-      metadata.image = {
-        originalName: imageFile.originalname,
-        mimeType: imageFile.mimetype,
-        size: imageFile.size
+    if (fileUpload) {
+      const isImage = fileUpload.mimetype?.startsWith('image/');
+
+      metadata.file = {
+        originalName: fileUpload.originalname,
+        mimeType: fileUpload.mimetype,
+        size: fileUpload.size,
+        kind: isImage ? 'image' : 'document'
       };
 
       try {
-        const analysis = await analyzeImageForCpf(imageFile);
-        metadata.image.notes = analysis.notes;
-        metadata.image.cpfs = analysis.cpfs;
-        pushCpfs(analysis.cpfs);
+        if (isImage) {
+          const analysis = await analyzeImageForCpf(fileUpload);
+          metadata.file.notes = analysis.notes;
+          metadata.file.cpfs = analysis.cpfs;
+          pushCpfs(analysis.cpfs);
 
-        if (analysis.cpfs.length) {
-          const formatted = analysis.cpfs.map(formatCpf).join(', ');
-          appendSegment(`Imagem ${imageFile.originalname} analisada. CPF(s) identificado(s): ${formatted}.`);
+          if (analysis.cpfs.length) {
+            const formatted = analysis.cpfs.map(formatCpf).join(', ');
+            appendSegment(`Imagem ${fileUpload.originalname} analisada. CPF(s) identificado(s): ${formatted}.`);
+          } else {
+            appendSegment(`Imagem ${fileUpload.originalname} analisada. Nenhum CPF identificado.`);
+          }
         } else {
-          appendSegment(`Imagem ${imageFile.originalname} analisada. Nenhum CPF identificado.`);
+          const analysis = await analyzeDocumentForCpf(fileUpload);
+          metadata.file.cpfs = analysis.cpfs;
+          pushCpfs(analysis.cpfs);
+
+          if (analysis.text) {
+            metadata.file.preview = analysis.text.slice(0, 500);
+          }
+
+          if (analysis.cpfs.length) {
+            const formatted = analysis.cpfs.map(formatCpf).join(', ');
+            appendSegment(`Arquivo ${fileUpload.originalname} analisado. CPF(s) identificado(s): ${formatted}.`);
+          } else {
+            appendSegment(`Arquivo ${fileUpload.originalname} analisado. Nenhum CPF identificado.`);
+          }
         }
       } catch (error) {
-        console.error('[CHAT] Erro ao analisar imagem:', error);
-        metadata.image.error = error.message;
-        appendSegment(`Não foi possível analisar a imagem ${imageFile.originalname} para detectar CPF.`);
-      }
-    }
-
-    if (documentFile) {
-      metadata.document = {
-        originalName: documentFile.originalname,
-        mimeType: documentFile.mimetype,
-        size: documentFile.size
-      };
-
-      try {
-        const analysis = await analyzeDocumentForCpf(documentFile);
-        metadata.document.cpfs = analysis.cpfs;
-        pushCpfs(analysis.cpfs);
-
-        if (analysis.text) {
-          metadata.document.preview = analysis.text.slice(0, 500);
-        }
-
-        if (analysis.cpfs.length) {
-          const formatted = analysis.cpfs.map(formatCpf).join(', ');
-          appendSegment(`Documento ${documentFile.originalname} analisado. CPF(s) identificado(s): ${formatted}.`);
-        } else {
-          appendSegment(`Documento ${documentFile.originalname} analisado. Nenhum CPF identificado.`);
-        }
-      } catch (error) {
-        console.error('[CHAT] Erro ao analisar documento:', error);
-        metadata.document.error = error.message;
-        appendSegment(`Não foi possível analisar o documento ${documentFile.originalname}.`);
+        console.error('[CHAT] Erro ao analisar arquivo:', error);
+        metadata.file.error = error.message;
+        appendSegment(`Não foi possível analisar o arquivo ${fileUpload.originalname}.`);
       }
     }
 
@@ -136,14 +126,12 @@ router.post('/chat', chatUpload, validateChatRequest, async (req, res) => {
     }
 
     if (!messageSegments.length) {
-      if (audioFile && imageFile) {
-        appendSegment('[Áudio e imagem enviados]');
+      if (audioFile && fileUpload) {
+        appendSegment('[Áudio e arquivo enviados]');
       } else if (audioFile) {
         appendSegment('[Áudio enviado]');
-      } else if (imageFile) {
-        appendSegment('[Imagem enviada]');
-      } else if (documentFile) {
-        appendSegment('[Documento enviado]');
+      } else if (fileUpload) {
+        appendSegment('[Arquivo enviado]');
       } else {
         appendSegment('[Mensagem vazia]');
       }

@@ -4,7 +4,7 @@ const validateChatRequest = (req, res, next) => {
   const schema = Joi.object({
     text: Joi.string().allow('', null).max(1000).optional(),
     conversation_id: Joi.string().uuid().allow(null, '').optional(),
-    type: Joi.string().valid('text', 'audio', 'image', 'document').optional()
+    type: Joi.string().valid('text', 'audio', 'file').optional()
   });
 
   const { error, value } = schema.validate(req.body, { abortEarly: false, stripUnknown: true });
@@ -18,23 +18,20 @@ const validateChatRequest = (req, res, next) => {
 
   const hasText = typeof value.text === 'string' && value.text.trim().length > 0;
   const hasAudio = Array.isArray(req.files?.audio) && req.files.audio.length > 0;
-  const hasImage = Array.isArray(req.files?.image) && req.files.image.length > 0;
-  const hasDocument = Array.isArray(req.files?.document) && req.files.document.length > 0;
+  const hasFile = Array.isArray(req.files?.file) && req.files.file.length > 0;
 
-  if (!hasText && !hasAudio && !hasImage && !hasDocument) {
+  if (!hasText && !hasAudio && !hasFile) {
     return res.status(400).json({
       error: 'Dados inválidos',
-      details: ['Informe pelo menos texto, áudio, imagem ou documento.']
+      details: ['Informe pelo menos texto, áudio ou arquivo.']
     });
   }
 
   if (!value.type) {
     if (hasAudio) {
       value.type = 'audio';
-    } else if (hasImage) {
-      value.type = 'image';
-    } else if (hasDocument) {
-      value.type = 'document';
+    } else if (hasFile) {
+      value.type = 'file';
     } else {
       value.type = 'text';
     }
@@ -47,17 +44,10 @@ const validateChatRequest = (req, res, next) => {
     });
   }
 
-  if (value.type === 'image' && !hasImage) {
+  if (value.type === 'file' && !hasFile) {
     return res.status(400).json({
       error: 'Dados inválidos',
-      details: ['Envie uma imagem para requests do tipo imagem.']
-    });
-  }
-
-  if (value.type === 'document' && !hasDocument) {
-    return res.status(400).json({
-      error: 'Dados inválidos',
-      details: ['Envie um documento para requests do tipo documento.']
+      details: ['Envie um arquivo para requests do tipo arquivo.']
     });
   }
 
@@ -68,11 +58,7 @@ const validateChatRequest = (req, res, next) => {
     });
   }
 
-  if (hasText) {
-    value.text = value.text.trim();
-  } else {
-    value.text = '';
-  }
+  value.text = hasText ? value.text.trim() : '';
 
   req.body = value;
   
