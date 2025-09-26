@@ -7,12 +7,64 @@ const chatUpload = require('../middleware/chatUpload');
 const { processUserMessage, processImageMessage } = require('../services/openai');
 const { transcribeAudioFile, analyzeImageForCpf, analyzeDocumentForCpf } = require('../services/mediaProcessor');
 const { extractCpfsFromText, formatCpf } = require('../utils/cpf');
+const { sendAssistantResponse } = require('../utils/assistantResponse');
 const { getTimeOfDayGreeting } = require('../utils/greeting');
 const { createConversationId, saveMessage, getConversation, formatMessagesForOpenAI } = require('../services/conversation');
+
+const boletoIntentPatterns = [
+  /\bbolet[oa]s?\b/,
+  /\bsegunda\s+via\b/,
+  /\b2a\s+via\b/,
+  /\blinha\s+digitavel\b/,
+  /\bcodigo\s+de\s+barras\b/,
+  /\bfatura(?:\s+do\s+plano)?\b/,
+  /\bmensalidade(?:\s+do\s+plano)?\b/
+];
+
+const carteirinhaIntentPatterns = [
+  /\bcarteirinha\b/,
+  /\bcarterinha\b/,
+  /\bcarteira\s+(?:do|da)\s+(?:plano|saude|corpe|convenio)\b/,
+  /\bcarteira\s+(?:digital|virtual)\b/,
+  /\bcarteira\s+do\s+convenio\b/,
+  /\bcartao\s+do\s+(?:plano|convenio)\b/
+];
+
+const detectExplicitIntent = (content) => {
+  if (!content || typeof content !== 'string') {
+    console.log('Aqui');
+    return null;
+  }
+
+  let normalized = content
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/ª/g, 'a');
+  
+  const boleto = boletoIntentPatterns.some((regex) => regex.test(normalized));
+  const carteirinha = carteirinhaIntentPatterns.some((regex) => regex.test(normalized));
+  
+  if (boleto && carteirinha) {
+    return 'both';
+  }
+
+  if (boleto) {
+    return 'boleto';
+  }
+
+  if (carteirinha) {
+    return 'carteirinha';
+  }
+
+  return null;
+};
 
 
 // Endpoint para chat via texto
 router.post('/chat', chatUpload, validateChatRequest, async (req, res) => {
+  //let conversationId = req.body?.conversation_id || createConversationId();
+
   try {
     const { text, conversation_id, type } = req.body;
     const kw = req.get("kw") || null;
@@ -22,17 +74,32 @@ router.post('/chat', chatUpload, validateChatRequest, async (req, res) => {
     const fileUpload = Array.isArray(files.file) && files.file.length ? files.file[0] : null;
 
     // Se não tem conversationId, cria uma nova id de conversa
-    const conversationId = conversation_id || createConversationId();
+    let conversationId = conversation_id || createConversationId();
 
     // Recupera conversa existente
     const conversation = await getConversation(conversationId);
-    const isFirstAssistantTurn = !conversation.some(message => message.role === 'assistant');
+    const hasAssistantTurn = conversation.some((message) => {
+      if (message.role !== 'assistant') {
+        return false;
+      }
+
+      const messageType = message.metadata?.type;
+      if (messageType && ['assistant_error', 'image_response'].includes(messageType)) {
+        return false;
+      }
+
+      return true;
+    });
+    const isFirstAssistantTurn = !hasAssistantTurn;
     const messages = formatMessagesForOpenAI(conversation);
 
     const metadata = { type };
     const messageSegments = [];
     const aggregatedCpfs = new Set();
+    const processingErrors = [];
+    let hasUserContent = false;
 
+    //Obtem cpf na conversa
     const pushCpfs = (cpfs) => {
       if (Array.isArray(cpfs)) {
         cpfs.forEach((cpf) => {
@@ -63,13 +130,18 @@ router.post('/chat', chatUpload, validateChatRequest, async (req, res) => {
 
         if (transcription) {
           appendSegment(`Transcrição do áudio (${audioFile.originalname}): ${transcription}`);
+          hasUserContent = true;
         } else {
-          appendSegment(`Arquivo de áudio (${audioFile.originalname}) recebido, mas nenhuma transcrição pôde ser gerada.`);
+          const friendly = `Recebi o áudio ${audioFile.originalname}, mas não consegui entender o conteúdo. Tente gravar novamente em um ambiente silencioso.`;
+          processingErrors.push(friendly);
+          appendSegment(friendly);
         }
       } catch (error) {
         console.error('[CHAT] Erro ao transcrever áudio:', error);
         metadata.audio.error = error.message;
-        appendSegment(`Não foi possível transcrever o áudio ${audioFile.originalname}.`);
+        const friendly = `Não consegui transcrever o áudio ${audioFile.originalname}. Por favor, envie novamente em MP3, WAV, OGG ou WEBM.`;
+        processingErrors.push(friendly);
+        appendSegment(friendly);
       }
     }
 
@@ -89,6 +161,7 @@ router.post('/chat', chatUpload, validateChatRequest, async (req, res) => {
           metadata.file.notes = analysis.notes;
           metadata.file.cpfs = analysis.cpfs;
           pushCpfs(analysis.cpfs);
+          hasUserContent = true;
 
           if (analysis.cpfs.length) {
             const formatted = analysis.cpfs.map(formatCpf).join(', ');
@@ -103,6 +176,11 @@ router.post('/chat', chatUpload, validateChatRequest, async (req, res) => {
 
           if (analysis.text) {
             metadata.file.preview = analysis.text.slice(0, 500);
+            hasUserContent = true;
+          }
+
+          if (analysis.cpfs.length) {
+            hasUserContent = true;
           }
 
           if (analysis.cpfs.length) {
@@ -115,7 +193,9 @@ router.post('/chat', chatUpload, validateChatRequest, async (req, res) => {
       } catch (error) {
         console.error('[CHAT] Erro ao analisar arquivo:', error);
         metadata.file.error = error.message;
-        appendSegment(`Não foi possível analisar o arquivo ${fileUpload.originalname}.`);
+        const friendly = `Não consegui analisar o arquivo ${fileUpload.originalname}. Envie JPEG, PNG, PDF, DOC, DOCX ou TXT, por favor.`;
+        processingErrors.push(friendly);
+        appendSegment(friendly);
       }
     }
 
@@ -123,8 +203,9 @@ router.post('/chat', chatUpload, validateChatRequest, async (req, res) => {
       const trimmed = text.trim();
       appendSegment(trimmed);
       pushCpfs(extractCpfsFromText(trimmed));
+      hasUserContent = true;
     }
-
+    
     if (!messageSegments.length) {
       if (audioFile && fileUpload) {
         appendSegment('[Áudio e arquivo enviados]');
@@ -145,51 +226,57 @@ router.post('/chat', chatUpload, validateChatRequest, async (req, res) => {
     }
 
     const userMessageContent = messageSegments.join('\n\n');
-
+    const explicitIntent = detectExplicitIntent(userMessageContent);
     messages.push({ role: 'user', content: userMessageContent });
 
     // Salva mensagem do usuário
+    if (explicitIntent) {
+      metadata.intent = explicitIntent;
+    }
     await saveMessage(conversationId, 'user', userMessageContent, metadata);
 
-    if (isFirstAssistantTurn && aggregatedCpfs.size === 0) {
+    if (processingErrors.length && !hasUserContent) {
+      const assistantReply = processingErrors.join(' ');
+      await saveMessage(conversationId, 'assistant', assistantReply, {
+        type: 'processing_error'
+      });
+      return sendAssistantResponse(res, assistantReply, conversationId);
+    }
+    
+    if (isFirstAssistantTurn && aggregatedCpfs.size === 0 && explicitIntent) {
       const greeting = getTimeOfDayGreeting();
       const assistantReply = `Olá, ${greeting}! Por favor, informe seu CPF (apenas números) para consulta. Obrigada.`;
 
       await saveMessage(conversationId, 'assistant', assistantReply, {
         type: 'auto_greeting',
-        greeting
+        greeting,
+        intent: explicitIntent
       });
 
-      return res.json({
-        text: assistantReply,
-        conversation_id: conversationId
-      });
+      return sendAssistantResponse(res, assistantReply, conversationId);
     }
 
     // Processa mensagem com OpenAI
-    const result = await processUserMessage(messages, kw);
+    const normalizedIsFirstAssistantTurn = isFirstAssistantTurn ? 'true' : 'false';
+    const result = await processUserMessage(messages, kw, normalizedIsFirstAssistantTurn);
 
     if (!result.success) {
-      return res.status(500).json({
-        success: false,
-        error: result.error
+      const assistantReply = result.error || 'Estou enfrentando dificuldades para continuar agora. Podemos tentar novamente daqui a pouco?';
+      await saveMessage(conversationId, 'assistant', assistantReply, {
+        type: 'assistant_error'
       });
+      return sendAssistantResponse(res, assistantReply, conversationId);
     }
 
     // Salva resposta da IA
     await saveMessage(conversationId, 'assistant', result.response);
 
-    res.json({
-      text: result.response,
-      conversation_id: conversationId,
-    });
+    return sendAssistantResponse(res, result.response, conversationId);
 
   } catch (error) {
     console.error('Erro no chat:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Erro interno do servidor'
-    });
+    const fallbackMessage = 'Não consegui concluir sua solicitação agora. Podemos tentar novamente em instantes?';
+    return sendAssistantResponse(res, fallbackMessage, conversationId);
   }
 });
 

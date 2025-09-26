@@ -71,7 +71,7 @@ app.post("/boleto", async (req, res) => {
   }
 });
 
-// Test carterinha
+// Test carteirinha
 app.post("/card", async (req, res) => {
   try {
     const cpf = req.body.cpf;

@@ -1,19 +1,22 @@
 const Joi = require('joi');
+const { sendAssistantResponse } = require('../utils/assistantResponse');
 
 const validateChatRequest = (req, res, next) => {
   const schema = Joi.object({
     text: Joi.string().allow('', null).max(1000).optional(),
     conversation_id: Joi.string().uuid().allow(null, '').optional(),
-    type: Joi.string().valid('text', 'audio', 'file').optional()
+    type: Joi.string().valid('text', 'audio', 'file', 'image', 'document').optional()
   });
 
   const { error, value } = schema.validate(req.body, { abortEarly: false, stripUnknown: true });
+  const conversationId = req.body?.conversation_id || null;
 
   if (error) {
-    return res.status(400).json({
-      error: 'Dados inválidos',
-      details: error.details.map(d => d.message)
-    });
+    return sendAssistantResponse(
+      res,
+      'Não consegui entender sua mensagem. Verifique os campos enviados e tente novamente.',
+      conversationId
+    );
   }
 
   const hasText = typeof value.text === 'string' && value.text.trim().length > 0;
@@ -21,10 +24,15 @@ const validateChatRequest = (req, res, next) => {
   const hasFile = Array.isArray(req.files?.file) && req.files.file.length > 0;
 
   if (!hasText && !hasAudio && !hasFile) {
-    return res.status(400).json({
-      error: 'Dados inválidos',
-      details: ['Informe pelo menos texto, áudio ou arquivo.']
-    });
+    return sendAssistantResponse(
+      res,
+      'Não encontrei nenhum conteúdo para analisar. Envie texto, um áudio ou um arquivo válido para eu continuar.',
+      conversationId
+    );
+  }
+
+  if (value.type === 'image' || value.type === 'document') {
+    value.type = 'file';
   }
 
   if (!value.type) {
@@ -38,24 +46,27 @@ const validateChatRequest = (req, res, next) => {
   }
 
   if (value.type === 'audio' && !hasAudio) {
-    return res.status(400).json({
-      error: 'Dados inválidos',
-      details: ['Envie um arquivo de áudio para requests do tipo áudio.']
-    });
+    return sendAssistantResponse(
+      res,
+      'Não localizei o arquivo de áudio. Envie o áudio em MP3, WAV, OGG ou WEBM para eu ouvir.',
+      conversationId
+    );
   }
 
   if (value.type === 'file' && !hasFile) {
-    return res.status(400).json({
-      error: 'Dados inválidos',
-      details: ['Envie um arquivo para requests do tipo arquivo.']
-    });
+    return sendAssistantResponse(
+      res,
+      'Não encontrei o arquivo enviado. Aceito documentos em PDF, DOC, DOCX, TXT ou imagens JPEG/PNG.',
+      conversationId
+    );
   }
 
   if (value.type === 'text' && !hasText) {
-    return res.status(400).json({
-      error: 'Dados inválidos',
-      details: ['Campo de texto é obrigatório para requests do tipo texto.']
-    });
+    return sendAssistantResponse(
+      res,
+      'Você escolheu enviar texto, mas o campo chegou vazio. Escreva sua mensagem para que eu consiga ajudar.',
+      conversationId
+    );
   }
 
   value.text = hasText ? value.text.trim() : '';

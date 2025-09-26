@@ -112,7 +112,7 @@ src/
 ├── templates/
 │   └── system-prompt.hbs # System prompt utilizado no modelo OpenAI
 ├── tools/
-│   ├── cardTool.js        # Tool para fazer requisição na API Corpe - recuperar carterinha
+│   ├── cardTool.js        # Tool para fazer requisição na API Corpe - recuperar carteirinha
 │   └── ticketTool.js      # Tool para fazer requisição na API Corpe - recuperar boleto/s
 ├── utils/
 │   ├── pinGenerator.js    # Gera o pin para ser enviado nas requisições de consulta na API Corpe
@@ -124,7 +124,7 @@ src/
 
 1. **Conversação**: Cada conversa é identificada por um UUID único
 2. **Persistência**: Últimas 50 mensagens salvas no Redis
-3. **Validação**: Chave KW no header `kw` - obrigatória para consulta da carterinha
+3. **Validação**: Chave KW no header `kw` - obrigatória para consulta da carteirinha
 4. **Funções**: Assistant usa function calling para consultar API Corpe
 
 ## Exemplos de Uso

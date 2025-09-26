@@ -7,8 +7,8 @@ const openai = new OpenAI({
 });
 
 // Usando Templates handlebars
-const createSystemPrompt = async (kw, statusLogin, options = {}) => {
-  return await templateService.renderSystemPrompt(kw, statusLogin, options);
+const createSystemPrompt = async (kw, statusLogin, isFirstAssistantTurn, options = {}) => {
+  return await templateService.renderSystemPrompt(kw, statusLogin, isFirstAssistantTurn, options);
 };
 
 // Usando PromptLoader

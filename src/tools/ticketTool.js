@@ -136,9 +136,9 @@ function formatTicketResponse(ticketsData) {
       const linhaDigitavel = formatLinhaDigitavel(ticket.linhaDigitavel);
 
       if (ticketsData.length > 1) {
-        ticketResponse = `✅ **Boleto ${index + 1} encontrado!**\n\n`;
+        ticketResponse = `✅ **Detalhe do boleto ${index + 1}: **\n\n`;
       } else {
-        ticketResponse = `✅ **Boleto encontrado!**\n\n`;
+        ticketResponse = `✅ **Detalhe do boleto: **\n\n`;
       }
 
       ticketResponse += `📋 **Linha Digitável:**\n`;

@@ -1,4 +1,5 @@
 const multer = require('multer');
+const { sendAssistantResponse } = require('../utils/assistantResponse');
 
 const storage = multer.memoryStorage();
 
@@ -43,13 +44,41 @@ const chatFields = upload.fields([
   { name: 'file', maxCount: 1 }
 ]);
 
+const formatUploadErrorMessage = (error) => {
+  if (!error) {
+    return 'Não consegui ler o arquivo enviado. Tente novamente com um formato válido.';
+  }
+
+  if (error instanceof multer.MulterError) {
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return 'O arquivo enviado é maior que 10 MB. Envie um arquivo menor, por favor.';
+    }
+
+    return 'Não consegui processar o arquivo enviado. Tente novamente ou utilize outro arquivo.';
+  }
+
+  const message = error.message || '';
+
+  if (message.includes('Áudio em formato não suportado')) {
+    return 'Não consegui ler o áudio enviado. Aceito arquivos MP3, WAV, OGG ou WEBM.';
+  }
+
+  if (message.includes('Arquivo em formato não suportado')) {
+    return 'Não consegui abrir o arquivo enviado. Use JPEG, PNG, PDF, DOC, DOCX ou TXT.';
+  }
+
+  if (message.includes('Campo de arquivo não suportado')) {
+    return 'Recebi um campo de arquivo que não reconheço. Envie o áudio em "audio" ou arquivos em "file".';
+  }
+
+  return 'Não consegui ler o arquivo enviado. Tente novamente com um formato compatível.';
+};
+
 module.exports = (req, res, next) => {
   chatFields(req, res, (err) => {
     if (err) {
-      const statusCode = err instanceof multer.MulterError ? 400 : 400;
-      return res.status(statusCode).json({
-        error: err.message
-      });
+      const friendlyMessage = formatUploadErrorMessage(err);
+      return sendAssistantResponse(res, friendlyMessage, req.body?.conversation_id || null);
     }
 
     next();

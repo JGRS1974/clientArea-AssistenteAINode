@@ -26,7 +26,7 @@ class TemplateService {
         }
     }
 
-    async renderSystemPrompt(kw, statusLogin, options = {}) {
+    async renderSystemPrompt(kw, statusLogin, isFirstAssistantTurn, options = {}) {
 
         const now = new Date();
 
@@ -44,9 +44,14 @@ class TemplateService {
 
         const template = await this.loadTemplate('system-prompt');
         
+        const normalizedIsFirstAssistantTurn = typeof isFirstAssistantTurn === 'string'
+          ? isFirstAssistantTurn
+          : (isFirstAssistantTurn ? 'true' : 'false');
+
         const defaultData = {
             kw,
             statusLogin,
+            isFirstAssistantTurn: normalizedIsFirstAssistantTurn,
             dataFormatted
         };
         const rendered = template({ ...defaultData, ...options });

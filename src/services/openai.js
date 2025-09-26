@@ -12,12 +12,12 @@ const formatLinhaDigitavelInText = (text) => {
   return text.replace(LINEA_DIGITAVEL_REGEX, (match) => formatLinhaDigitavel(match));
 };
 
-const processUserMessage = async (messages, kw) => {
+const processUserMessage = async (messages, kw, isFirstAssistantTurn) => {
   try {
 
     const statusLogin = kw ? 'usuário logado' : 'usuário não logado';
-
-    const systemPrompt = await createSystemPrompt(kw, statusLogin);
+    
+    const systemPrompt = await createSystemPrompt(kw, statusLogin, isFirstAssistantTurn);
     const functions = getFunctions();
 
     const completion = await openai.chat.completions.create({
@@ -28,7 +28,7 @@ const processUserMessage = async (messages, kw) => {
       ],
       functions,
       function_call: 'auto',
-      temperature: 0.3,
+      temperature: 0.5,
       max_tokens: 1000
     });
     
@@ -51,7 +51,7 @@ const processUserMessage = async (messages, kw) => {
           if (!kwArgument) {
             functionResult = {
               success: false,
-              error: 'Para consultar sua carteirinha, você precisa estar logado no sistema.'
+              error: 'Para consultar sua carteirinha, você precisa estar logado no sistema. Posso ajudar em mais alguma coisa?'
             };
           } else {
             functionResult = await card_lookup(functionArgs.cpf, kwArgument);
@@ -75,7 +75,7 @@ const processUserMessage = async (messages, kw) => {
             content: JSON.stringify(functionResult)
           }
         ],
-        temperature: 0.3,
+        temperature: 0.5,
         max_tokens: 1000
       });
 

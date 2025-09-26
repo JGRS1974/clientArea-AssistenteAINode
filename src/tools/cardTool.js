@@ -7,11 +7,11 @@ const card_lookup = async (cpf, kw) => {
     
     const response = await apiConsumer(data, process.env.CORPE_CARTEIRINHA_ENDPOINT)
    
-    
     const { quantidade, planos } = response;
     
     if (!quantidade || quantidade === 0) {
-      return `Nenhuma informação da carterinha foi encontrada para o CPF ${cpf}.`;
+      console.log('ENTROU AQUI');
+      return `Nenhuma informação da carteirinha foi encontrada para o CPF ${cpf}.`;
     }
     
     const beneficiariesInformation = [];
@@ -28,7 +28,7 @@ const card_lookup = async (cpf, kw) => {
     }
     
     if (!beneficiariesInformation || beneficiariesInformation.length === 0){
-      return `Nenhuma informação da carterinha foi encontrada para o CPF ${cpf}.`;
+      return `Nenhuma informação da carteirinha foi encontrada para o CPF ${cpf}.`;
     }else{
 
       let response = "Informações da carteirinha encontradas:\n\n";
@@ -77,13 +77,24 @@ const card_lookup = async (cpf, kw) => {
 
   } catch (error) {
     const msg = error.response?.data?.message || error.message || "Erro desconhecido";
-    console.error(`[CARD TOOL] Erro ao buscar informação da carterinha para o Cpf ${cpf}. Erro: ${msg}`);
+    console.error(`[CARD TOOL] Erro ao buscar informação da carteirinha para o Cpf ${cpf}. Erro: ${msg}`);
+    
+    // Propaga erro específico de KW inválida / acesso expirado para o prompt tratar corretamente
+    try {
+      if (
+        /kw\s*inv(?:á|a)lid[ao]/i.test(msg) ||
+        /acesso\s*expirad/i.test(msg) ||
+        /token\s*(?:inv(?:á|a)lid[ao]|expirad)/i.test(msg)
+      ) {
+        return 'KW inválida';
+      }
+    } catch (_) { /* noop */ }
     
     if (error.response?.status === 404) {
-      return `Nenhuma informação da carterinha foi encontrada para o CPF ${cpf}.`;
+      return `Nenhuma informação da carteirinha foi encontrada para o CPF ${cpf}.`;
     }
 
-    return `Não foi possível consultar a informação da carterinha para o CPF do cliente ${cpf}, ocorreu um erro técnico.`;
+    return `Não foi possível consultar a informação da carteirinha para o CPF do cliente ${cpf}, ocorreu um erro técnico.`;
   }
 };
 
